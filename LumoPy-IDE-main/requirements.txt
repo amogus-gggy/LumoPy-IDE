@@ -1,0 +1,4 @@
+# Основные зависимости для IDE
+customtkinter>=5.2.0
+pygments>=2.15.0
+tkterm>=0.1.0

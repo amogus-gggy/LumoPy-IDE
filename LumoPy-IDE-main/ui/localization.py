@@ -1,0 +1,60 @@
+LANGS = {
+    'ru': {
+        'File': 'Файл',
+        'Settings': 'Настройки',
+        'Folder': 'Папка файлов...',
+        'Open': 'Открыть',
+        'Save': 'Сохранить',
+        'Theme': 'Тема:',
+        'Font': 'Шрифт:',
+        'Size': 'Размер:',
+        'Terminal': 'Встроенный терминал:',
+        'Apply': 'Применить',
+        'SettingsTitle': 'Настройки',
+        'WindowTitle': 'PyDE',
+        'Rename': 'Переименовать',
+        'Delete': 'Удалить',
+        'NewFile': 'Создать файл',
+        'NewFolder': 'Создать папку',
+        'Error': 'Ошибка',
+        'DeleteConfirm': "Удалить '{name}'? Это действие необратимо.",
+        'RenamePrompt': "Новое имя для '{name}':",
+        'CreatePromptFile': 'Имя файла:',
+        'CreatePromptFolder': 'Имя папки:',
+        'Untitled': 'Безымянный',
+        'Yes': 'Да',
+        'No': 'Нет',
+    },
+    'en': {
+        'File': 'File',
+        'Settings': 'Settings',
+        'Folder': 'Folder...',
+        'Open': 'Open',
+        'Save': 'Save',
+        'Theme': 'Theme:',
+        'Font': 'Font:',
+        'Size': 'Size:',
+        'Terminal': 'Built-in terminal:',
+        'Apply': 'Apply',
+        'SettingsTitle': 'Settings',
+        'WindowTitle': 'PyDE',
+        'Rename': 'Rename',
+        'Delete': 'Delete',
+        'NewFile': 'New File',
+        'NewFolder': 'New Folder',
+        'Error': 'Error',
+        'DeleteConfirm': "Delete '{name}'? This action is irreversible.",
+        'RenamePrompt': "New name for '{name}':",
+        'CreatePromptFile': 'File name:',
+        'CreatePromptFolder': 'Folder name:',
+        'Untitled': 'Untitled',
+        'Yes': 'Yes',
+        'No': 'No',
+    }
+}
+
+def tr(lang, key, **kwargs):
+    val = LANGS.get(lang, LANGS['en']).get(key, key)
+    if kwargs:
+        return val.format(**kwargs)
+    return val 
