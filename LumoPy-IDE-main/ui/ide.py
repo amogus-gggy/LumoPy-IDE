@@ -270,7 +270,7 @@ class IDE(ctk.CTk):
         open_btn.pack(padx=5, pady=(5, 2))
         save_btn = ctk.CTkButton(self.file_menu_popup, text=tr(self.current_lang, 'Save'), width=140, height=32, command=lambda: self._file_menu_action('save'), fg_color="transparent", hover_color=hover_color, border_width=1, border_color=border_color, text_color=text_color)
         save_btn.pack(padx=5, pady=(0, 2))
-        folder_btn = ctk.CTkButton(self.file_menu_popup, text=tr(self.current_lang, 'Folder'), width=140, height=32, command=self.choose_file_panel_folder, fg_color="transparent", hover_color=hover_color, border_width=1, border_color=border_color, text_color=text_color)
+        folder_btn = ctk.CTkButton(self.file_menu_popup, text=tr(self.current_lang, 'Folder'), width=140, height=32, command=self.file_panel.choose_file_panel_folder, fg_color="transparent", hover_color=hover_color, border_width=1, border_color=border_color, text_color=text_color)
         folder_btn.pack(padx=5, pady=(0, 2))
         run_btn = ctk.CTkButton(self.file_menu_popup, text="Запустить проект", width=140, height=32, command=self.run_project, fg_color="transparent", hover_color=hover_color, border_width=1, border_color=border_color, text_color=text_color)
         run_btn.pack(padx=5, pady=(0, 2))
@@ -660,8 +660,14 @@ class IDE(ctk.CTk):
 
     def _detect_project_type(self):
         """Определяет тип проекта по содержимому папки"""
-        files = os.listdir(self.file_panel.file_panel_root)
-        
+        root = self.file_panel.file_panel_root
+        if not root or not os.path.exists(root):
+            return {
+                "command": "python",
+                "args": "main.py",
+                "description": "Python проект (путь не найден)"
+            }
+        files = os.listdir(root)
         # Python проект
         if any(f.endswith('.py') for f in files) or 'requirements.txt' in files:
             return {
@@ -669,7 +675,6 @@ class IDE(ctk.CTk):
                 "args": "main.py",
                 "description": "Python проект"
             }
-        
         # По умолчанию Python
         return {
             "command": "python",
