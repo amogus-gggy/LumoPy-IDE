@@ -12,6 +12,7 @@ from ui.console import TerminalWidget
 from tkinter import ttk
 from ui.localization import LANGS, tr
 import json
+from ui.file_panel import FilePanel
 
 class IDE(ctk.CTk):
     FONTS = ["Consolas", "Fira Code", "Courier New"]
@@ -89,38 +90,10 @@ class IDE(ctk.CTk):
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
         # --- Файловая панель ---
-        self.file_panel_frame = tk.Frame(self.paned_window, bg="#232323", width=200)
-        self.file_listbox = tk.Listbox(
-            self.file_panel_frame,
-            bg=THEMES[self.current_theme]["editor_bg"],
-            fg=THEMES[self.current_theme]["editor_fg"],
-            selectbackground=THEMES[self.current_theme]["output_bg"],
-            selectforeground=THEMES[self.current_theme]["output_fg"],
-            font=(self.current_font, self.current_size-1),
-            activestyle='none',
-            borderwidth=0,
-            highlightthickness=0
-        )
-        self.file_listbox.pack(expand=True, fill="both", padx=2, pady=2)
-        self.file_listbox.bind("<Double-1>", self.on_file_open_listbox)
-        self.file_listbox.bind_all("<Button-3>", self._on_file_listbox_rmb)
-        self.file_listbox.bind_all("<Button-2>", self._on_file_listbox_rmb)  # Для Mac
+        self.file_panel = FilePanel(self.paned_window, self)
+        self.file_panel_frame = self.file_panel.frame
+        self.paned_window.add(self.file_panel_frame, weight=0)
         self.file_panel_visible = True
-        # Используем сохраненную директорию или текущую рабочую директорию
-        if self.last_directory and os.path.exists(self.last_directory):
-            self.file_panel_root = self.last_directory
-            try:
-                os.chdir(self.last_directory)
-            except Exception:
-                self.file_panel_root = os.path.abspath(os.getcwd())
-        else:
-            self.file_panel_root = os.path.abspath(os.getcwd())
-        self.file_tree_state = {}  # path: expanded True/False
-        self.file_tree_items = []  # flat list of (path, level, isdir, expanded)
-        self.file_panel_update_job = None
-        self.schedule_file_panel_update()
-        self.populate_file_listbox_tree()
-        self.set_treeview_black()
         # --- Основная рабочая область ---
         self.main_frame = tk.Frame(self.paned_window)
         self.main_frame.grid_rowconfigure(0, weight=1)
@@ -182,119 +155,11 @@ class IDE(ctk.CTk):
                 self.terminal.write('powershell -NoLogo -NoExit -Command "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new()"\r')
             except Exception:
                 pass
-        self.paned_window.add(self.file_panel_frame, weight=0)
         self.paned_window.add(self.main_frame, weight=1)
         # Загружаем конфигурацию проекта
         self._load_project_config()
         # Только теперь применяем тему
         self.apply_theme()
-
-    def populate_file_listbox_tree(self):
-        self.file_listbox.delete(0, tk.END)
-        self.file_tree_items = []
-        def walk(path, level):
-            try:
-                entries = sorted(os.listdir(path), key=lambda x: (not os.path.isdir(os.path.join(path, x)), x.lower()))
-            except Exception:
-                return
-            for p in entries:
-                full_path = os.path.join(path, p)
-                isdir = os.path.isdir(full_path)
-                expanded = self.file_tree_state.get(full_path, False)
-                if isdir:
-                    icon = "▼" if expanded else "▶"
-                    prefix = "    " * level + f"{icon} "
-                else:
-                    prefix = "    " * level + "   "
-                self.file_listbox.insert(tk.END, prefix + p)
-                self.file_tree_items.append((full_path, level, isdir, expanded))
-                if isdir and expanded:
-                    walk(full_path, level+1)
-        walk(self.file_panel_root, 0)
-
-    def on_file_open_listbox(self, event):
-        selection = self.file_listbox.curselection()
-        if not selection:
-            return
-        idx = selection[0]
-        path, level, isdir, expanded = self.file_tree_items[idx]
-        if isdir:
-            self.file_tree_state[path] = not expanded
-            self.populate_file_listbox_tree()
-        elif os.path.isfile(path):
-            # Открываем файл во вкладке
-            for tab in self.tabs:
-                if tab["path"] == path:
-                    self._switch_tab(tab)
-                    return
-            with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            tab = {"path": path, "name": os.path.basename(path), "content": content, "dirty": False}
-            self.tabs.append(tab)
-            self._switch_tab(tab)
-
-    def toggle_file_panel(self):
-        if self.file_panel_visible:
-            self.paned_window.forget(self.file_panel_frame)
-            self.file_panel_visible = False
-        else:
-            self.paned_window.insert(0, self.file_panel_frame)
-            self.file_panel_visible = True
-
-    def schedule_file_panel_update(self):
-        if self.file_panel_update_job:
-            self.after_cancel(self.file_panel_update_job)
-        self.populate_file_listbox_tree()
-        self.file_panel_update_job = self.after(15000, self.schedule_file_panel_update)  # 15 секунд
-
-    def choose_file_panel_folder(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.file_panel_root = folder
-            self.last_directory = folder  # Сохраняем выбранную директорию
-            self._save_settings()  # Сохраняем настройки
-            try:
-                os.chdir(folder)
-            except Exception:
-                pass
-            # Загружаем конфигурацию проекта
-            self._load_project_config()
-            # Пересоздаём терминал
-            if hasattr(self, 'terminal'):
-                try:
-                    self.inner_paned.forget(self.terminal)
-                    self.terminal.destroy()
-                except Exception:
-                    pass
-                from ui.console import TerminalWidget
-                self.terminal = TerminalWidget(self.inner_paned, bg=THEMES[self.current_theme]["output_bg"], fg=THEMES[self.current_theme]["output_fg"], font=(self.current_font, self.current_size))
-                self.inner_paned.add(self.terminal, weight=1)
-            self.populate_file_listbox_tree()
-            self.schedule_file_panel_update()
-
-    def recreate_file_listbox_with_theme(self):
-        print("recreate_file_listbox_with_theme")
-        theme = THEMES[self.current_theme]
-        # Удаляем старый Listbox
-        if hasattr(self, 'file_listbox') and self.file_listbox.winfo_exists():
-            self.file_listbox.pack_forget()
-            self.file_listbox.destroy()
-        # Создаём новый Listbox с нужными цветами
-        self.file_listbox = tk.Listbox(
-            self.file_panel_frame,
-            bg=theme["editor_bg"],
-            fg=theme["editor_fg"],
-            selectbackground=theme.get("output_bg", "#222222"),
-            selectforeground=theme.get("output_fg", "#ffffff"),
-            font=(self.current_font, self.current_size-1),
-            activestyle='none',
-            borderwidth=0,
-            highlightthickness=0
-        )
-        self.file_listbox.pack(expand=True, fill="both", padx=2, pady=2)
-        self.file_listbox.bind("<Double-1>", self.on_file_open_listbox)
-        self.populate_file_listbox_tree()
-        self.file_listbox.update_idletasks()
 
     def update_file_panel_theme(self):
         self.recreate_file_listbox_with_theme()
@@ -322,7 +187,7 @@ class IDE(ctk.CTk):
             )
         self.menu_frame.configure(fg_color=theme["editor_bg"])
         self.menu_frame.update_idletasks()
-        self.update_file_panel_theme()
+        self.file_panel.update_theme(self.current_theme, self.current_font, self.current_size)
         self.update_sash_color()
         self._render_tabs()
         self._save_settings()
@@ -453,8 +318,8 @@ class IDE(ctk.CTk):
         self._render_tabs()
 
     def destroy(self):
-        if self.file_panel_update_job:
-            self.after_cancel(self.file_panel_update_job)
+        if hasattr(self, 'file_panel') and hasattr(self.file_panel, 'destroy'):
+            self.file_panel.destroy()
         super().destroy()
 
     def set_treeview_black(self):
@@ -503,7 +368,6 @@ class IDE(ctk.CTk):
         self.file_listbox.pack(expand=True, fill="both", padx=2, pady=2)
         self.file_listbox.bind("<Double-1>", self.on_file_open_listbox)
         self.file_panel_visible = True
-        self.file_panel_root = os.path.abspath(os.getcwd())
         self.file_tree_state = {}  # path: expanded True/False
         self.file_tree_items = []  # flat list of (path, level, isdir, expanded)
         self.file_panel_update_job = None
@@ -588,7 +452,7 @@ class IDE(ctk.CTk):
         name = askstring(tr(self.current_lang, 'NewFolder') if is_folder else tr(self.current_lang, 'NewFile'), prompt)
         if not name:
             return
-        path = os.path.join(self.file_panel_root, name)
+        path = os.path.join(self.file_panel.file_panel_root, name)
         try:
             if is_folder:
                 os.makedirs(path, exist_ok=True)
@@ -759,7 +623,7 @@ class IDE(ctk.CTk):
 
     def _load_project_config(self):
         """Загружает конфигурацию запуска проекта из .lumocfg/run.json"""
-        config_path = os.path.join(self.file_panel_root, ".lumocfg", "run.json")
+        config_path = os.path.join(self.file_panel.file_panel_root, ".lumocfg", "run.json")
         try:
             if os.path.exists(config_path):
                 with open(config_path, "r", encoding="utf-8") as f:
@@ -773,7 +637,7 @@ class IDE(ctk.CTk):
 
     def _create_default_project_config(self):
         """Создает конфигурацию запуска по умолчанию для проекта"""
-        config_dir = os.path.join(self.file_panel_root, ".lumocfg")
+        config_dir = os.path.join(self.file_panel.file_panel_root, ".lumocfg")
         config_path = os.path.join(config_dir, "run.json")
         
         # Определяем тип проекта по содержимому папки
@@ -796,7 +660,7 @@ class IDE(ctk.CTk):
 
     def _detect_project_type(self):
         """Определяет тип проекта по содержимому папки"""
-        files = os.listdir(self.file_panel_root)
+        files = os.listdir(self.file_panel.file_panel_root)
         
         # Python проект
         if any(f.endswith('.py') for f in files) or 'requirements.txt' in files:
@@ -815,7 +679,7 @@ class IDE(ctk.CTk):
 
     def _save_project_config(self):
         """Сохраняет конфигурацию запуска проекта"""
-        config_path = os.path.join(self.file_panel_root, ".lumocfg", "run.json")
+        config_path = os.path.join(self.file_panel.file_panel_root, ".lumocfg", "run.json")
         try:
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             with open(config_path, "w", encoding="utf-8") as f:
@@ -834,9 +698,9 @@ class IDE(ctk.CTk):
         working_dir = self.run_config.get("working_dir", "")
         
         if working_dir:
-            full_working_dir = os.path.join(self.file_panel_root, working_dir)
+            full_working_dir = os.path.join(self.file_panel.file_panel_root, working_dir)
         else:
-            full_working_dir = self.file_panel_root
+            full_working_dir = self.file_panel.file_panel_root
         
         try:
             # Формируем полную команду
@@ -989,4 +853,16 @@ pause > nul
             win.destroy()
         
         ctk.CTkButton(actions_frame, text="Сохранить", command=save_config, width=100).pack(side="left", padx=5)
-        ctk.CTkButton(actions_frame, text="Отмена", command=win.destroy, width=100).pack(side="left", padx=5) 
+        ctk.CTkButton(actions_frame, text="Отмена", command=win.destroy, width=100).pack(side="left", padx=5)
+
+    def on_file_open(self, path):
+        # Открывает файл из файловой панели во вкладке
+        for tab in self.tabs:
+            if tab["path"] == path:
+                self._switch_tab(tab)
+                return
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        tab = {"path": path, "name": os.path.basename(path), "content": content, "dirty": False}
+        self.tabs.append(tab)
+        self._switch_tab(tab) 
